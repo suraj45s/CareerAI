@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database.database import init_db, AsyncSessionLocal
 from database import models
-from database.models import User
-from database.schemas import UserCreate
+from database.models import User, StudentProfile
+from database.schemas import UserCreate, ProfileUpdate
 from security import hash_password, verify_password, create_access_token, SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
 from security import SECRET_KEY, ALGORITHM
@@ -134,19 +134,107 @@ async def profile(
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(User).where(User.id == user_id)
-        )
+    select(User, StudentProfile)
+    .outerjoin(
+        StudentProfile,
+        User.id == StudentProfile.user_id
+    )
+    .where(User.id == user_id)
+)
 
-        user = result.scalar_one_or_none()
+        row = result.first()
 
-        if not user:
+        if not row:
             raise HTTPException(
                 status_code=404,
                 detail="User not found"
             )
 
+        user, profile = row
+
+
         return {
-            "id": user.id,
-            "name": user.name,
-            "email": user.email
-        }
+    "id": user.id,
+    "name": user.name,
+    "email": user.email,
+    "phone": profile.phone if profile else None,
+    "college": profile.college if profile else None,
+    "degree": profile.degree if profile else None,
+    "branch": profile.branch if profile else None,
+    "graduation_year": profile.graduation_year if profile else None,
+    "skills": profile.skills if profile else None,
+    "github": profile.github if profile else None,
+    "linkedin": profile.linkedin if profile else None
+}
+
+    
+@app.put("/profile")
+async def update_profile(
+    profile: ProfileUpdate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        user_id = payload.get("user_id")
+
+        if user_id is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token"
+            )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    async with AsyncSessionLocal() as db:
+
+        result = await db.execute(
+            select(StudentProfile).where(
+                StudentProfile.user_id == user_id
+            )
+        )
+
+        existing_profile = result.scalar_one_or_none()
+
+        if existing_profile:
+            existing_profile.phone = profile.phone
+            existing_profile.college = profile.college
+            existing_profile.degree = profile.degree
+            existing_profile.branch = profile.branch
+            existing_profile.graduation_year = profile.graduation_year
+            existing_profile.skills = profile.skills
+            existing_profile.github = profile.github
+            existing_profile.linkedin = profile.linkedin
+
+        else:
+            existing_profile = StudentProfile(
+                user_id=user_id,
+                phone=profile.phone,
+                college=profile.college,
+                degree=profile.degree,
+                branch=profile.branch,
+                graduation_year=profile.graduation_year,
+                skills=profile.skills,
+                github=profile.github,
+                linkedin=profile.linkedin
+            )
+
+            db.add(existing_profile)
+
+        await db.commit()
+        await db.refresh(existing_profile)
+
+        return {
+            "message": "Profile updated successfully",
+            "profile_id": existing_profile.id
+        }    
