@@ -23,3 +23,11 @@ class StudentProfile(Base):
     skills = Column(String, nullable=True)
     github = Column(String, nullable=True)
     linkedin = Column(String, nullable=True)
+class Resume(Base):
+    __tablename__ = "resumes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, unique=True, nullable=False)
+
+    file_name = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)

@@ -1,16 +1,18 @@
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
+import os
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database.database import init_db, AsyncSessionLocal
 from database import models
-from database.models import User, StudentProfile
+from database.models import User, StudentProfile, Resume
 from database.schemas import UserCreate, ProfileUpdate
 from security import hash_password, verify_password, create_access_token, SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
 from security import SECRET_KEY, ALGORITHM
 security = HTTPBearer()
+from fastapi.responses import FileResponse
 
 app = FastAPI(
     title="CareerAI API",
@@ -237,4 +239,180 @@ async def update_profile(
         return {
             "message": "Profile updated successfully",
             "profile_id": existing_profile.id
-        }    
+        } 
+    
+@app.post("/upload-resume")
+async def upload_resume(
+    file: UploadFile = File(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        user_id = payload.get("user_id")
+
+        if user_id is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token"
+            )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF files are allowed"
+        )
+
+    file_path = os.path.join(
+        "uploads",
+        file.filename
+    )
+
+    with open(file_path, "wb") as buffer:
+        buffer.write(await file.read())
+
+    async with AsyncSessionLocal() as db:
+
+        result = await db.execute(
+            select(Resume).where(
+                Resume.user_id == user_id
+            )
+        )
+
+        existing_resume = result.scalar_one_or_none()
+
+        if existing_resume:
+            existing_resume.file_name = file.filename
+            existing_resume.file_path = file_path
+
+        else:
+            new_resume = Resume(
+                user_id=user_id,
+                file_name=file.filename,
+                file_path=file_path
+            )
+
+            db.add(new_resume)
+
+        await db.commit()
+
+    return {
+        "message": "Resume uploaded successfully",
+        "user_id": user_id,
+        "file_name": file.filename,
+        "file_path": file_path
+    }
+@app.get("/resume")
+async def get_resume(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        user_id = payload.get("user_id")
+
+        if user_id is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token"
+            )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    async with AsyncSessionLocal() as db:
+
+        result = await db.execute(
+            select(Resume).where(
+                Resume.user_id == user_id
+            )
+        )
+
+        resume = result.scalar_one_or_none()
+
+        if not resume:
+            raise HTTPException(
+                status_code=404,
+                detail="Resume not found"
+            )
+
+        return {
+            "id": resume.id,
+            "file_name": resume.file_name,
+            "file_path": resume.file_path
+        }
+@app.get("/resume/view")
+async def view_resume(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        user_id = payload.get("user_id")
+
+        if user_id is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token"
+            )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    async with AsyncSessionLocal() as db:
+
+        result = await db.execute(
+            select(Resume).where(
+                Resume.user_id == user_id
+            )
+        )
+
+        resume = result.scalar_one_or_none()
+
+        if not resume:
+            raise HTTPException(
+                status_code=404,
+                detail="Resume not found"
+            )
+
+        if not os.path.exists(resume.file_path):
+            raise HTTPException(
+                status_code=404,
+                detail="Resume file not found"
+            )
+
+        return FileResponse(
+            resume.file_path,
+            media_type="application/pdf",
+            filename=resume.file_name
+        )
