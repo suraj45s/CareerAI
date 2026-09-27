@@ -31,3 +31,5 @@ class Resume(Base):
 
     file_name = Column(String, nullable=False)
     file_path = Column(String, nullable=False)
+    resume_text = Column(String, nullable=True)
+    extracted_skills = Column(String, nullable=True)

@@ -105,10 +105,17 @@ const handleViewResume = async () => {
     <p>📄 {resume.file_name}</p>
 
     <button onClick={handleViewResume}>
-  View Resume
-</button>
+      View Resume
+    </button>
+
+    <h3>Extracted Skills</h3>
+
+    <p>
+      {resume.extracted_skills || "No skills detected"}
+    </p>
   </div>
 )}
+
 
       {message && <p>{message}</p>}
     </div>

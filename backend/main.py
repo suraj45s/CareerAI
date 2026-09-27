@@ -13,6 +13,8 @@ from jose import jwt, JWTError
 from security import SECRET_KEY, ALGORITHM
 security = HTTPBearer()
 from fastapi.responses import FileResponse
+from pypdf import PdfReader
+from skills import extract_skills
 
 app = FastAPI(
     title="CareerAI API",
@@ -282,6 +284,16 @@ async def upload_resume(
 
     with open(file_path, "wb") as buffer:
         buffer.write(await file.read())
+    reader = PdfReader(file_path)
+
+    resume_text = ""
+
+    for page in reader.pages:
+        text = page.extract_text()
+
+        if text:
+          resume_text += text + "\n"
+    extracted_skills = extract_skills(resume_text)
 
     async with AsyncSessionLocal() as db:
 
@@ -294,14 +306,19 @@ async def upload_resume(
         existing_resume = result.scalar_one_or_none()
 
         if existing_resume:
-            existing_resume.file_name = file.filename
-            existing_resume.file_path = file_path
+           existing_resume.file_name = file.filename
+           existing_resume.file_path = file_path
+           existing_resume.resume_text = resume_text
+           existing_resume.extracted_skills = ", ".join(extracted_skills)
 
         else:
             new_resume = Resume(
                 user_id=user_id,
                 file_name=file.filename,
-                file_path=file_path
+                file_path=file_path,
+                resume_text=resume_text,
+                extracted_skills=", ".join(extracted_skills)
+                
             )
 
             db.add(new_resume)
@@ -358,10 +375,11 @@ async def get_resume(
             )
 
         return {
-            "id": resume.id,
-            "file_name": resume.file_name,
-            "file_path": resume.file_path
-        }
+    "id": resume.id,
+    "file_name": resume.file_name,
+    "file_path": resume.file_path,
+    "extracted_skills": resume.extracted_skills
+}
 @app.get("/resume/view")
 async def view_resume(
     credentials: HTTPAuthorizationCredentials = Depends(security)
