@@ -33,3 +33,15 @@ class Resume(Base):
     file_path = Column(String, nullable=False)
     resume_text = Column(String, nullable=True)
     extracted_skills = Column(String, nullable=True)
+
+class Job(Base):
+    __tablename__ = "jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    title = Column(String, nullable=False)
+    company = Column(String, nullable=False)
+    location = Column(String, nullable=True)
+    description = Column(String, nullable=True)
+    required_skills = Column(String, nullable=True)
+    apply_url = Column(String, nullable=True)

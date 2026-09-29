@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database.database import init_db, AsyncSessionLocal
 from database import models
-from database.models import User, StudentProfile, Resume
+from database.models import User, StudentProfile, Resume, Job
 from database.schemas import UserCreate, ProfileUpdate
 from security import hash_password, verify_password, create_access_token, SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
@@ -434,3 +434,53 @@ async def view_resume(
             media_type="application/pdf",
             filename=resume.file_name
         )
+@app.post("/jobs")
+async def create_job(
+    title: str,
+    company: str,
+    location: str = "",
+    description: str = "",
+    required_skills: str = "",
+    apply_url: str = ""
+):
+    async with AsyncSessionLocal() as db:
+
+        new_job = Job(
+            title=title,
+            company=company,
+            location=location,
+            description=description,
+            required_skills=required_skills,
+            apply_url=apply_url
+        )
+
+        db.add(new_job)
+        await db.commit()
+        await db.refresh(new_job)
+
+        return {
+            "message": "Job created successfully",
+            "job_id": new_job.id
+        }
+@app.get("/jobs")
+async def get_jobs():
+    async with AsyncSessionLocal() as db:
+
+        result = await db.execute(
+            select(Job)
+        )
+
+        jobs = result.scalars().all()
+
+        return [
+            {
+                "id": job.id,
+                "title": job.title,
+                "company": job.company,
+                "location": job.location,
+                "description": job.description,
+                "required_skills": job.required_skills,
+                "apply_url": job.apply_url
+            }
+            for job in jobs
+        ]
