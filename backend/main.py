@@ -15,6 +15,7 @@ security = HTTPBearer()
 from fastapi.responses import FileResponse
 from pypdf import PdfReader
 from skills import extract_skills
+from recommendations import calculate_match
 
 app = FastAPI(
     title="CareerAI API",
@@ -484,3 +485,88 @@ async def get_jobs():
             }
             for job in jobs
         ]
+@app.get("/recommended-jobs")
+async def recommended_jobs(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        user_id = payload.get("user_id")
+
+        if user_id is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token"
+            )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    async with AsyncSessionLocal() as db:
+
+        # Get user's resume
+        result = await db.execute(
+            select(Resume).where(Resume.user_id == user_id)
+        )
+
+        resume = result.scalar_one_or_none()
+
+        if not resume:
+            raise HTTPException(
+                status_code=404,
+                detail="Resume not found"
+            )
+
+        user_skills = resume.extracted_skills or ""
+
+        # Get all jobs
+        result = await db.execute(select(Job))
+        jobs = result.scalars().all()
+
+        recommendations = []
+
+        for job in jobs:
+
+         match_percentage = calculate_match(
+         user_skills,
+         job.required_skills or ""
+    )
+         print(
+    "JOB:",
+    job.title,
+    "| REQUIRED:",
+    job.required_skills,
+    "| MATCH:",
+    match_percentage
+)
+
+         if match_percentage >= 30:
+
+          recommendations.append({
+            "id": job.id,
+            "title": job.title,
+            "company": job.company,
+            "location": job.location,
+            "description": job.description,
+            "required_skills": job.required_skills,
+            "apply_url": job.apply_url,
+            "match_percentage": match_percentage
+        })
+
+        # Highest match first
+        recommendations.sort(
+            key=lambda x: x["match_percentage"],
+            reverse=True
+        )
+
+        return recommendations

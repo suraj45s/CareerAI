@@ -5,6 +5,7 @@ import Register from "./pages/Register";
 import Profile from "./pages/profile";
 import Resume from "./pages/Resume";
 import Jobs from "./pages/Jobs";
+import RecommendedJobs from "./pages/RecommendedJobs";
 function App() {
   return (
     <BrowserRouter>
@@ -15,6 +16,10 @@ function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/resume" element={<Resume />} />
         <Route path="/jobs" element={<Jobs />} />
+        <Route
+                path="/recommended-jobs"
+                element={<RecommendedJobs />}
+        />
       </Routes>
     </BrowserRouter>
   );
